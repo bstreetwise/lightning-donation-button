@@ -418,6 +418,48 @@
     .new-invoice-btn:hover {
       background: rgba(255, 255, 255, 0.25);
     }
+
+    .payment-methods {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .payment-method-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .payment-method-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .payment-method-btn.active {
+      background: rgba(247, 147, 26, 0.3);
+      border-color: #f7931a;
+    }
+
+    .payment-method-btn .method-label {
+      display: block;
+      font-size: 11px;
+      opacity: 0.6;
+      margin-top: 2px;
+    }
+
+    .onchain-notice {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      margin-top: 8px;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -431,21 +473,32 @@
 
     <div class="amount-slider">
       <div class="amount-input-wrapper">
-        <input type="number" id="customAmount" placeholder="100" min="10" max="10000" value="100">
+        <input type="number" id="customAmount" placeholder="100" min="10" value="100">
         <span class="sats-label">sats</span>
       </div>
-      <input type="range" id="amountSlider" min="10" max="10000" value="100" step="10">
+      <input type="range" id="amountSlider" min="10" max="100000" value="100" step="10">
       <div class="range-labels">
         <span>10 sats</span>
-        <span>10,000 sats</span>
+        <span>100,000 sats</span>
       </div>
+    </div>
+
+    <div id="paymentMethods" class="payment-methods" style="display: none;">
+      <button id="lnBtn" class="payment-method-btn active">
+        ⚡ Lightning
+        <span class="method-label">Fast & cheap</span>
+      </button>
+      <button id="onchainBtn" class="payment-method-btn">
+        🔗 On-chain
+        <span class="method-label">For large amounts</span>
+      </button>
     </div>
 
     <button id="donateBtn" class="lightning-btn">
       <svg viewBox="0 0 24 24">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
       </svg>
-      Donate with Lightning
+      Donate with Bitcoin
     </button>
 
     <div id="errorMsg" class="error-msg"></div>
@@ -503,10 +556,16 @@
     const refreshStatusBtn = document.getElementById('refreshStatus');
     const expiredActions = document.getElementById('expiredActions');
     const newInvoiceBtn = document.getElementById('newInvoiceBtn');
+    const paymentMethods = document.getElementById('paymentMethods');
+    const lnBtn = document.getElementById('lnBtn');
+    const onchainBtn = document.getElementById('onchainBtn');
     
     let currentPaymentRequest = '';
+    let currentAddress = '';
     let selectedAmount = 100;
     let statusPollingInterval = null;
+    let paymentMethod = 'lightning';
+    const LARGE_AMOUNT_THRESHOLD = 10000;
 
     function showError(msg) {
       errorMsg.textContent = msg;
@@ -585,6 +644,45 @@
       }
       
       return data.data.lnInvoiceCreateOnBehalfOfRecipient.invoice;
+    }
+
+    async function createOnchainAddress(walletId, amountSats, memo) {
+      const query = `
+        mutation onChainAddressCreate($input: OnChainAddressCreateInput!) {
+          onChainAddressCreate(input: $input) {
+            address
+            errors {
+              message
+            }
+          }
+        }
+      `;
+
+      const response = await fetch(BLINK_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          variables: {
+            input: {
+              walletId: walletId,
+              memo: memo
+            }
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.errors) {
+        throw new Error(data.errors[0].message);
+      }
+      
+      if (data.data.onChainAddressCreate.errors?.length) {
+        throw new Error(data.data.onChainAddressCreate.errors[0].message);
+      }
+      
+      return data.data.onChainAddressCreate.address;
     }
 
     async function checkPaymentStatus(paymentRequest) {
@@ -670,7 +768,7 @@
       }
 
       donateBtn.disabled = true;
-      donateBtn.innerHTML = '<span class="spinner"></span> Creating invoice...';
+      donateBtn.innerHTML = '<span class="spinner"></span> Creating...';
 
       try {
         let walletId = RECIPIENT_WALLET_ID;
@@ -684,25 +782,55 @@
           return;
         }
 
-        const invoice = await createInvoice(walletId, selectedAmount, 'Lightning Donation');
+        let paymentData;
         
-        currentPaymentRequest = invoice.paymentRequest;
-        invoiceText.textContent = invoice.paymentRequest;
-        displayAmount.textContent = selectedAmount;
-        
-        qrCanvas.width = 200;
-        qrCanvas.height = 200;
-        QRCode.toCanvas(qrCanvas, invoice.paymentRequest, {
-          width: 200,
-          margin: 0,
-          color: {
-            dark: '#1a1a2e',
-            light: '#ffffff'
-          }
-        });
+        if (paymentMethod === 'onchain' || selectedAmount > LARGE_AMOUNT_THRESHOLD) {
+          const address = await createOnchainAddress(walletId, selectedAmount, 'Bitcoin Donation');
+          currentAddress = address;
+          currentPaymentRequest = '';
+          paymentData = address;
+          
+          displayAmount.textContent = selectedAmount;
+          invoiceText.textContent = address;
+          
+          qrCanvas.width = 200;
+          qrCanvas.height = 200;
+          QRCode.toCanvas(qrCanvas, address, {
+            width: 200,
+            margin: 0,
+            color: {
+              dark: '#1a1a2e',
+              light: '#ffffff'
+            }
+          });
+          
+          paymentStatus.classList.remove('visible');
+          stopPolling();
+        } else {
+          const invoice = await createInvoice(walletId, selectedAmount, 'Lightning Donation');
+          
+          currentPaymentRequest = invoice.paymentRequest;
+          currentAddress = '';
+          paymentData = invoice.paymentRequest;
+          
+          invoiceText.textContent = invoice.paymentRequest;
+          displayAmount.textContent = selectedAmount;
+          
+          qrCanvas.width = 200;
+          qrCanvas.height = 200;
+          QRCode.toCanvas(qrCanvas, invoice.paymentRequest, {
+            width: 200,
+            margin: 0,
+            color: {
+              dark: '#1a1a2e',
+              light: '#ffffff'
+            }
+          });
+          
+          startStatusPolling(invoice.paymentRequest);
+        }
         
         invoiceDisplay.classList.add('visible');
-        startStatusPolling(invoice.paymentRequest);
         
       } catch (error) {
         showError(`Error: ${error.message}`);
@@ -712,7 +840,7 @@
           <svg viewBox="0 0 24 24">
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
-          Donate with Lightning
+          Donate with Bitcoin
         `;
       }
     }
@@ -729,13 +857,24 @@
 
     function updateAmount(value) {
       let amount = parseInt(value) || 10;
-      amount = Math.max(10, Math.min(10000, amount));
+      amount = Math.max(10, amount);
       selectedAmount = amount;
       amountSlider.value = amount;
       customAmount.value = amount;
+      
+      if (amount > LARGE_AMOUNT_THRESHOLD) {
+        paymentMethods.style.display = 'flex';
+      } else {
+        paymentMethods.style.display = 'none';
+        paymentMethod = 'lightning';
+        lnBtn.classList.add('active');
+        onchainBtn.classList.remove('active');
+      }
+      
       hideError();
       invoiceDisplay.classList.remove('visible');
       currentPaymentRequest = '';
+      currentAddress = '';
       stopPolling();
     }
 
@@ -747,11 +886,24 @@
       updateAmount(e.target.value);
     });
 
+    lnBtn.addEventListener('click', () => {
+      paymentMethod = 'lightning';
+      lnBtn.classList.add('active');
+      onchainBtn.classList.remove('active');
+    });
+
+    onchainBtn.addEventListener('click', () => {
+      paymentMethod = 'onchain';
+      onchainBtn.classList.add('active');
+      lnBtn.classList.remove('active');
+    });
+
     donateBtn.addEventListener('click', handleDonate);
 
     copyBtn.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText(currentPaymentRequest);
+        const textToCopy = currentPaymentRequest || currentAddress;
+        await navigator.clipboard.writeText(textToCopy);
         copyBtn.textContent = 'Copied!';
         copyBtn.classList.add('copied');
         setTimeout(() => {
@@ -765,7 +917,13 @@
     });
 
     openWalletBtn.addEventListener('click', () => {
-      window.location.href = `lightning:${currentPaymentRequest}`;
+      if (currentPaymentRequest) {
+        window.location.href = `lightning:${currentPaymentRequest}`;
+      } else if (currentAddress) {
+        navigator.clipboard.writeText(currentAddress);
+        openWalletBtn.textContent = 'Address Copied!';
+        setTimeout(() => openWalletBtn.textContent = 'Open Wallet', 2000);
+      }
     });
 
     refreshStatusBtn.addEventListener('click', async () => {
