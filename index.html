@@ -257,6 +257,80 @@
       font-weight: 700;
       margin-bottom: 16px;
     }
+
+    .payment-status {
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .payment-status.visible {
+      display: flex;
+    }
+
+    .payment-status.pending {
+      background: rgba(255, 193, 7, 0.15);
+      color: #ffc107;
+      border: 1px solid rgba(255, 193, 7, 0.3);
+    }
+
+    .payment-status.paid {
+      background: rgba(76, 175, 80, 0.15);
+      color: #4caf50;
+      border: 1px solid rgba(76, 175, 80, 0.3);
+    }
+
+    .payment-status.expired {
+      background: rgba(255, 107, 107, 0.15);
+      color: #ff6b6b;
+      border: 1px solid rgba(255, 107, 107, 0.3);
+    }
+
+    .payment-status .status-icon {
+      width: 18px;
+      height: 18px;
+    }
+
+    .status-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .check-icon {
+      display: none;
+    }
+
+    .payment-status.paid .check-icon {
+      display: block;
+    }
+
+    .payment-status.paid .status-spinner {
+      display: none;
+    }
+
+    .refresh-btn {
+      background: transparent;
+      border: none;
+      color: inherit;
+      cursor: pointer;
+      padding: 4px;
+      margin-left: 8px;
+      opacity: 0.7;
+    }
+
+    .refresh-btn:hover {
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
@@ -300,6 +374,20 @@
         <button id="copyBtn" class="copy-btn">Copy</button>
         <button id="openWalletBtn" class="open-wallet-btn">Open Wallet</button>
       </div>
+      
+      <div id="paymentStatus" class="payment-status pending">
+        <span class="status-spinner"></span>
+        <svg class="check-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span class="status-text">Waiting for payment...</span>
+        <button id="refreshStatus" class="refresh-btn" title="Check status">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -319,9 +407,13 @@
     const copyBtn = document.getElementById('copyBtn');
     const openWalletBtn = document.getElementById('openWalletBtn');
     const qrCanvas = document.getElementById('qrCode');
+    const paymentStatus = document.getElementById('paymentStatus');
+    const statusText = paymentStatus.querySelector('.status-text');
+    const refreshStatusBtn = document.getElementById('refreshStatus');
     
     let currentPaymentRequest = '';
     let selectedAmount = 500;
+    let statusPollingInterval = null;
 
     function showError(msg) {
       errorMsg.textContent = msg;
@@ -402,6 +494,78 @@
       return data.data.lnInvoiceCreateOnBehalfOfRecipient.invoice;
     }
 
+    async function checkPaymentStatus(paymentRequest) {
+      const query = `
+        query lnInvoicePaymentStatusByPaymentRequest($input: LnInvoicePaymentStatusByPaymentRequestInput!) {
+          lnInvoicePaymentStatusByPaymentRequest(input: $input) {
+            status
+            paymentHash
+          }
+        }
+      `;
+
+      const response = await fetch(BLINK_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          variables: {
+            input: { paymentRequest }
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (data.errors) {
+        throw new Error(data.errors[0].message);
+      }
+      return data.data.lnInvoicePaymentStatusByPaymentRequest.status;
+    }
+
+    function updatePaymentStatusUI(status) {
+      paymentStatus.classList.remove('pending', 'paid', 'expired');
+      
+      if (status === 'PAID') {
+        paymentStatus.classList.add('paid');
+        statusText.textContent = 'Payment received! Thank you!';
+        if (statusPollingInterval) {
+          clearInterval(statusPollingInterval);
+          statusPollingInterval = null;
+        }
+      } else if (status === 'EXPIRED') {
+        paymentStatus.classList.add('expired');
+        statusText.textContent = 'Invoice expired';
+        if (statusPollingInterval) {
+          clearInterval(statusPollingInterval);
+          statusPollingInterval = null;
+        }
+      } else {
+        paymentStatus.classList.add('pending');
+        statusText.textContent = 'Waiting for payment...';
+      }
+    }
+
+    async function startStatusPolling(paymentRequest) {
+      if (statusPollingInterval) {
+        clearInterval(statusPollingInterval);
+      }
+      
+      paymentStatus.classList.add('visible');
+      updatePaymentStatusUI('PENDING');
+
+      const checkStatus = async () => {
+        try {
+          const status = await checkPaymentStatus(paymentRequest);
+          updatePaymentStatusUI(status);
+        } catch (error) {
+          console.error('Status check failed:', error);
+        }
+      };
+
+      await checkStatus();
+      statusPollingInterval = setInterval(checkStatus, 5000);
+    }
+
     async function handleDonate() {
       hideError();
       
@@ -443,6 +607,7 @@
         });
         
         invoiceDisplay.classList.add('visible');
+        startStatusPolling(invoice.paymentRequest);
         
       } catch (error) {
         showError(`Error: ${error.message}`);
@@ -457,6 +622,15 @@
       }
     }
 
+    function stopPolling() {
+      if (statusPollingInterval) {
+        clearInterval(statusPollingInterval);
+        statusPollingInterval = null;
+      }
+      paymentStatus.classList.remove('visible');
+      paymentStatus.classList.remove('pending', 'paid', 'expired');
+    }
+
     amountBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         amountBtns.forEach(b => b.classList.remove('active'));
@@ -466,6 +640,7 @@
         hideError();
         invoiceDisplay.classList.remove('visible');
         currentPaymentRequest = '';
+        stopPolling();
       });
     });
 
@@ -475,6 +650,7 @@
       hideError();
       invoiceDisplay.classList.remove('visible');
       currentPaymentRequest = '';
+      stopPolling();
     });
 
     donateBtn.addEventListener('click', handleDonate);
@@ -496,6 +672,17 @@
 
     openWalletBtn.addEventListener('click', () => {
       window.location.href = `lightning:${currentPaymentRequest}`;
+    });
+
+    refreshStatusBtn.addEventListener('click', async () => {
+      if (currentPaymentRequest) {
+        try {
+          const status = await checkPaymentStatus(currentPaymentRequest);
+          updatePaymentStatusUI(status);
+        } catch (error) {
+          console.error('Status check failed:', error);
+        }
+      }
     });
   </script>
 </body>
