@@ -476,10 +476,10 @@
         <input type="number" id="customAmount" placeholder="100" min="10" value="100">
         <span class="sats-label">sats</span>
       </div>
-      <input type="range" id="amountSlider" min="10" max="100000" value="100" step="10">
+      <input type="range" id="amountSlider" min="10" max="2000000" value="100" step="10">
       <div class="range-labels">
         <span>10 sats</span>
-        <span>100,000 sats</span>
+        <span>2,000,000 sats</span>
       </div>
     </div>
 
@@ -565,7 +565,7 @@
     let selectedAmount = 100;
     let statusPollingInterval = null;
     let paymentMethod = 'lightning';
-    const LARGE_AMOUNT_THRESHOLD = 10000;
+    const LARGE_AMOUNT_THRESHOLD = 1000000;
 
     function showError(msg) {
       errorMsg.textContent = msg;
