@@ -197,6 +197,66 @@
       text-transform: uppercase;
       letter-spacing: 1px;
     }
+
+    .qr-container {
+      background: #fff;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+
+    .qr-container canvas {
+      display: block;
+    }
+
+    .invoice-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .copy-btn, .open-wallet-btn {
+      flex: 1;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .copy-btn.copied {
+      background: rgba(76, 175, 80, 0.3);
+      border-color: #4caf50;
+    }
+
+    .open-wallet-btn {
+      background: #f7931a;
+      color: #fff;
+    }
+
+    .open-wallet-btn:hover {
+      background: #e6850a;
+    }
+
+    .amount-display {
+      color: #f7931a;
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
   </style>
 </head>
 <body>
@@ -230,11 +290,20 @@
     <div id="errorMsg" class="error-msg"></div>
     
     <div id="invoiceDisplay" class="invoice-display">
+      <div class="amount-display"><span id="displayAmount"></span> sats</div>
+      <div class="qr-container">
+        <canvas id="qrCode"></canvas>
+      </div>
       <div class="label">Payment Request</div>
       <div id="invoiceText"></div>
+      <div class="invoice-actions">
+        <button id="copyBtn" class="copy-btn">Copy</button>
+        <button id="openWalletBtn" class="open-wallet-btn">Open Wallet</button>
+      </div>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script>
     const BLINK_API_URL = 'https://api.dev.blink.sv/graphql';
     const RECIPIENT_WALLET_ID = '';
@@ -246,7 +315,12 @@
     const errorMsg = document.getElementById('errorMsg');
     const invoiceDisplay = document.getElementById('invoiceDisplay');
     const invoiceText = document.getElementById('invoiceText');
+    const displayAmount = document.getElementById('displayAmount');
+    const copyBtn = document.getElementById('copyBtn');
+    const openWalletBtn = document.getElementById('openWalletBtn');
+    const qrCanvas = document.getElementById('qrCode');
     
+    let currentPaymentRequest = '';
     let selectedAmount = 500;
 
     function showError(msg) {
@@ -353,10 +427,22 @@
 
         const invoice = await createInvoice(walletId, selectedAmount, 'Lightning Donation');
         
+        currentPaymentRequest = invoice.paymentRequest;
         invoiceText.textContent = invoice.paymentRequest;
-        invoiceDisplay.classList.add('visible');
+        displayAmount.textContent = selectedAmount;
         
-        window.location.href = `lightning:${invoice.paymentRequest}`;
+        qrCanvas.width = 200;
+        qrCanvas.height = 200;
+        QRCode.toCanvas(qrCanvas, invoice.paymentRequest, {
+          width: 200,
+          margin: 0,
+          color: {
+            dark: '#1a1a2e',
+            light: '#ffffff'
+          }
+        });
+        
+        invoiceDisplay.classList.add('visible');
         
       } catch (error) {
         showError(`Error: ${error.message}`);
@@ -379,6 +465,7 @@
         customInput.value = '';
         hideError();
         invoiceDisplay.classList.remove('visible');
+        currentPaymentRequest = '';
       });
     });
 
@@ -387,9 +474,29 @@
       selectedAmount = parseInt(e.target.value) || 0;
       hideError();
       invoiceDisplay.classList.remove('visible');
+      currentPaymentRequest = '';
     });
 
     donateBtn.addEventListener('click', handleDonate);
+
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(currentPaymentRequest);
+        copyBtn.textContent = 'Copied!';
+        copyBtn.classList.add('copied');
+        setTimeout(() => {
+          copyBtn.textContent = 'Copy';
+          copyBtn.classList.remove('copied');
+        }, 2000);
+      } catch (err) {
+        copyBtn.textContent = 'Failed';
+        setTimeout(() => copyBtn.textContent = 'Copy', 2000);
+      }
+    });
+
+    openWalletBtn.addEventListener('click', () => {
+      window.location.href = `lightning:${currentPaymentRequest}`;
+    });
   </script>
 </body>
 </html>
