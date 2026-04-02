@@ -604,8 +604,8 @@
 
     async function createInvoice(walletId, amountSats, memo) {
       const query = `
-        mutation lnInvoiceCreateOnBehalfOfRecipient($input: LnInvoiceCreateOnBehalfOfRecipientInput!) {
-          lnInvoiceCreateOnBehalfOfRecipient(input: $input) {
+        mutation lnNoAmountInvoiceCreateOnBehalfOfRecipient($input: LnNoAmountInvoiceCreateOnBehalfOfRecipientInput!) {
+          lnNoAmountInvoiceCreateOnBehalfOfRecipient(input: $input) {
             invoice {
               paymentRequest
               paymentHash
@@ -625,7 +625,6 @@
           variables: {
             input: {
               recipientWalletId: walletId,
-              amount: amountSats,
               memo: memo,
               expiresIn: 60
             }
@@ -639,11 +638,13 @@
         throw new Error(data.errors[0].message);
       }
       
-      if (data.data.lnInvoiceCreateOnBehalfOfRecipient.errors?.length) {
-        throw new Error(data.data.lnInvoiceCreateOnBehalfOfRecipient.errors[0].message);
+      if (data.data.lnNoAmountInvoiceCreateOnBehalfOfRecipient.errors?.length) {
+        throw new Error(data.data.lnNoAmountInvoiceCreateOnBehalfOfRecipient.errors[0].message);
       }
       
-      return data.data.lnInvoiceCreateOnBehalfOfRecipient.invoice;
+      const invoice = data.data.lnNoAmountInvoiceCreateOnBehalfOfRecipient.invoice;
+      
+      return invoice;
     }
 
     async function createOnchainAddress(walletId, amountSats, memo) {
@@ -918,7 +919,11 @@
 
     openWalletBtn.addEventListener('click', () => {
       if (currentPaymentRequest) {
-        window.location.href = `lightning:${currentPaymentRequest}`;
+        if (currentPaymentRequest.startsWith('LNURL1')) {
+          window.location.href = currentPaymentRequest;
+        } else {
+          window.location.href = `lightning:${currentPaymentRequest}`;
+        }
       } else if (currentAddress) {
         navigator.clipboard.writeText(currentAddress);
         openWalletBtn.textContent = 'Address Copied!';
