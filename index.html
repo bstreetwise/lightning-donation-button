@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support Our Work</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    }
+
+    .donation-card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 48px;
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+    }
+
+    .bolt-icon {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      color: #fff;
+      font-size: 28px;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    p {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 16px;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+
+    .lightning-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: linear-gradient(135deg, #f7931a 0%, #ffb347 100%);
+      color: #fff;
+      border: none;
+      padding: 16px 32px;
+      font-size: 18px;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      text-decoration: none;
+      width: 100%;
+    }
+
+    .lightning-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(247, 147, 26, 0.4);
+    }
+
+    .lightning-btn:active {
+      transform: translateY(0);
+    }
+
+    .lightning-btn svg {
+      width: 24px;
+      height: 24px;
+      fill: currentColor;
+    }
+
+    .amount-options {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      justify-content: center;
+    }
+
+    .amount-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 14px;
+    }
+
+    .amount-btn:hover,
+    .amount-btn.active {
+      background: rgba(247, 147, 26, 0.3);
+      border-color: #f7931a;
+    }
+
+    .custom-amount {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .custom-amount input {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 16px;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .custom-amount input:focus {
+      border-color: #f7931a;
+    }
+
+    .custom-amount input::placeholder {
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    .sats-label {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="donation-card">
+    <svg class="bolt-icon" viewBox="0 0 24 24" fill="#f7931a">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+    </svg>
+    
+    <h1>Support Our Work</h1>
+    <p>Help us continue building amazing things. Every sat counts!</p>
+
+    <div class="amount-options">
+      <button class="amount-btn" data-amount="100">100</button>
+      <button class="amount-btn active" data-amount="500">500</button>
+      <button class="amount-btn" data-amount="1000">1000</button>
+      <button class="amount-btn" data-amount="5000">5000</button>
+    </div>
+
+    <div class="custom-amount">
+      <input type="number" id="customAmount" placeholder="Custom amount" min="1">
+      <span class="sats-label">sats</span>
+    </div>
+
+    <a href="#" id="donateBtn" class="lightning-btn">
+      <svg viewBox="0 0 24 24">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+      Donate with Lightning
+    </a>
+  </div>
+
+  <script>
+    const BLINK_LNURL = 'LNURL1DP68GURN8GHJ7MRWV5H6MXX2CMVDE6HEM';
+    
+    const amountBtns = document.querySelectorAll('.amount-btn');
+    const customInput = document.getElementById('customAmount');
+    const donateBtn = document.getElementById('donateBtn');
+    
+    let selectedAmount = 500;
+
+    amountBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        amountBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedAmount = parseInt(btn.dataset.amount);
+        customInput.value = '';
+      });
+    });
+
+    customInput.addEventListener('input', (e) => {
+      amountBtns.forEach(b => b.classList.remove('active'));
+      selectedAmount = parseInt(e.target.value) || 0;
+    });
+
+    donateBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      
+      if (selectedAmount < 1) {
+        alert('Please select or enter an amount');
+        return;
+      }
+
+      const amount = selectedAmount;
+      const lnurl = `${BLINK_LNURL}?amount=${amount}`;
+      
+      window.location.href = `lightning:${lnurl}`;
+    });
+  </script>
+</body>
+</html>
