@@ -69,13 +69,18 @@
       width: 100%;
     }
 
-    .lightning-btn:hover {
+    .lightning-btn:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 8px 24px rgba(247, 147, 26, 0.4);
     }
 
-    .lightning-btn:active {
+    .lightning-btn:active:not(:disabled) {
       transform: translateY(0);
+    }
+
+    .lightning-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
 
     .lightning-btn svg {
@@ -89,6 +94,7 @@
       gap: 12px;
       margin-bottom: 24px;
       justify-content: center;
+      flex-wrap: wrap;
     }
 
     .amount-btn {
@@ -139,6 +145,58 @@
       color: rgba(255, 255, 255, 0.6);
       font-size: 14px;
     }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-msg {
+      color: #ff6b6b;
+      font-size: 14px;
+      margin-top: 16px;
+      padding: 12px;
+      background: rgba(255, 107, 107, 0.1);
+      border-radius: 8px;
+      display: none;
+    }
+
+    .error-msg.visible {
+      display: block;
+    }
+
+    .invoice-display {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 20px;
+      word-break: break-all;
+      font-family: monospace;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+      display: none;
+    }
+
+    .invoice-display.visible {
+      display: block;
+    }
+
+    .invoice-display .label {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
   </style>
 </head>
 <body>
@@ -162,22 +220,156 @@
       <span class="sats-label">sats</span>
     </div>
 
-    <a href="#" id="donateBtn" class="lightning-btn">
+    <button id="donateBtn" class="lightning-btn">
       <svg viewBox="0 0 24 24">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
       </svg>
       Donate with Lightning
-    </a>
+    </button>
+
+    <div id="errorMsg" class="error-msg"></div>
+    
+    <div id="invoiceDisplay" class="invoice-display">
+      <div class="label">Payment Request</div>
+      <div id="invoiceText"></div>
+    </div>
   </div>
 
   <script>
-    const BLINK_LNURL = 'LNURL1DP68GURN8GHJ7MRWV5H6MXX2CMVDE6HEM';
-    
+    const BLINK_API_URL = 'https://api.dev.blink.sv/graphql';
+    const RECIPIENT_WALLET_ID = '';
+    const RECIPIENT_USERNAME = '';
+
     const amountBtns = document.querySelectorAll('.amount-btn');
     const customInput = document.getElementById('customAmount');
     const donateBtn = document.getElementById('donateBtn');
+    const errorMsg = document.getElementById('errorMsg');
+    const invoiceDisplay = document.getElementById('invoiceDisplay');
+    const invoiceText = document.getElementById('invoiceText');
     
     let selectedAmount = 500;
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.classList.add('visible');
+      invoiceDisplay.classList.remove('visible');
+    }
+
+    function hideError() {
+      errorMsg.classList.remove('visible');
+    }
+
+    async function resolveWalletId(username) {
+      const query = `
+        query accountDefaultWallet($username: Username!, $walletCurrency: WalletCurrency) {
+          accountDefaultWallet(username: $username, walletCurrency: $walletCurrency) {
+            id
+          }
+        }
+      `;
+
+      const response = await fetch(BLINK_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          variables: { username, walletCurrency: 'BTC' }
+        })
+      });
+
+      const data = await response.json();
+      if (data.errors) {
+        throw new Error(data.errors[0].message);
+      }
+      return data.data.accountDefaultWallet.id;
+    }
+
+    async function createInvoice(walletId, amountSats, memo) {
+      const query = `
+        mutation lnInvoiceCreateOnBehalfOfRecipient($input: LnInvoiceCreateOnBehalfOfRecipientInput!) {
+          lnInvoiceCreateOnBehalfOfRecipient(input: $input) {
+            invoice {
+              paymentRequest
+              paymentHash
+            }
+            errors {
+              message
+            }
+          }
+        }
+      `;
+
+      const response = await fetch(BLINK_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          variables: {
+            input: {
+              recipientWalletId: walletId,
+              amount: amountSats,
+              memo: memo,
+              expiresIn: 60
+            }
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.errors) {
+        throw new Error(data.errors[0].message);
+      }
+      
+      if (data.data.lnInvoiceCreateOnBehalfOfRecipient.errors?.length) {
+        throw new Error(data.data.lnInvoiceCreateOnBehalfOfRecipient.errors[0].message);
+      }
+      
+      return data.data.lnInvoiceCreateOnBehalfOfRecipient.invoice;
+    }
+
+    async function handleDonate() {
+      hideError();
+      
+      if (selectedAmount < 1) {
+        showError('Please select or enter an amount');
+        return;
+      }
+
+      donateBtn.disabled = true;
+      donateBtn.innerHTML = '<span class="spinner"></span> Creating invoice...';
+
+      try {
+        let walletId = RECIPIENT_WALLET_ID;
+        
+        if (!walletId && RECIPIENT_USERNAME) {
+          walletId = await resolveWalletId(RECIPIENT_USERNAME);
+        }
+
+        if (!walletId) {
+          showError('Please configure RECIPIENT_WALLET_ID or RECIPIENT_USERNAME in the code');
+          return;
+        }
+
+        const invoice = await createInvoice(walletId, selectedAmount, 'Lightning Donation');
+        
+        invoiceText.textContent = invoice.paymentRequest;
+        invoiceDisplay.classList.add('visible');
+        
+        window.location.href = `lightning:${invoice.paymentRequest}`;
+        
+      } catch (error) {
+        showError(`Error: ${error.message}`);
+      } finally {
+        donateBtn.disabled = false;
+        donateBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          Donate with Lightning
+        `;
+      }
+    }
 
     amountBtns.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -185,27 +377,19 @@
         btn.classList.add('active');
         selectedAmount = parseInt(btn.dataset.amount);
         customInput.value = '';
+        hideError();
+        invoiceDisplay.classList.remove('visible');
       });
     });
 
     customInput.addEventListener('input', (e) => {
       amountBtns.forEach(b => b.classList.remove('active'));
       selectedAmount = parseInt(e.target.value) || 0;
+      hideError();
+      invoiceDisplay.classList.remove('visible');
     });
 
-    donateBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      
-      if (selectedAmount < 1) {
-        alert('Please select or enter an amount');
-        return;
-      }
-
-      const amount = selectedAmount;
-      const lnurl = `${BLINK_LNURL}?amount=${amount}`;
-      
-      window.location.href = `lightning:${lnurl}`;
-    });
+    donateBtn.addEventListener('click', handleDonate);
   </script>
 </body>
 </html>
