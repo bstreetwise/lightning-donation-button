@@ -331,6 +331,55 @@
     .refresh-btn:hover {
       opacity: 1;
     }
+
+    @keyframes successPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes celebrate {
+      0% { transform: scale(1) rotate(0deg); }
+      25% { transform: scale(1.1) rotate(-5deg); }
+      50% { transform: scale(1.1) rotate(5deg); }
+      75% { transform: scale(1.1) rotate(-5deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+
+    .payment-status.paid {
+      animation: successPulse 0.6s ease-in-out;
+    }
+
+    .payment-status.paid .bolt-icon-success {
+      animation: celebrate 0.8s ease-in-out;
+    }
+
+    .expired-actions {
+      margin-top: 12px;
+      display: none;
+    }
+
+    .expired-actions.visible {
+      display: flex;
+      gap: 8px;
+    }
+
+    .new-invoice-btn {
+      flex: 1;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .new-invoice-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
   </style>
 </head>
 <body>
@@ -377,7 +426,7 @@
       
       <div id="paymentStatus" class="payment-status pending">
         <span class="status-spinner"></span>
-        <svg class="check-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="check-icon bolt-icon-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
         <span class="status-text">Waiting for payment...</span>
@@ -387,6 +436,10 @@
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
           </svg>
         </button>
+      </div>
+
+      <div id="expiredActions" class="expired-actions">
+        <button id="newInvoiceBtn" class="new-invoice-btn">Generate New Invoice</button>
       </div>
     </div>
   </div>
@@ -410,6 +463,8 @@
     const paymentStatus = document.getElementById('paymentStatus');
     const statusText = paymentStatus.querySelector('.status-text');
     const refreshStatusBtn = document.getElementById('refreshStatus');
+    const expiredActions = document.getElementById('expiredActions');
+    const newInvoiceBtn = document.getElementById('newInvoiceBtn');
     
     let currentPaymentRequest = '';
     let selectedAmount = 500;
@@ -524,6 +579,7 @@
 
     function updatePaymentStatusUI(status) {
       paymentStatus.classList.remove('pending', 'paid', 'expired');
+      expiredActions.classList.remove('visible');
       
       if (status === 'PAID') {
         paymentStatus.classList.add('paid');
@@ -534,7 +590,8 @@
         }
       } else if (status === 'EXPIRED') {
         paymentStatus.classList.add('expired');
-        statusText.textContent = 'Invoice expired';
+        statusText.textContent = 'This invoice has expired';
+        expiredActions.classList.add('visible');
         if (statusPollingInterval) {
           clearInterval(statusPollingInterval);
           statusPollingInterval = null;
@@ -563,7 +620,7 @@
       };
 
       await checkStatus();
-      statusPollingInterval = setInterval(checkStatus, 5000);
+      statusPollingInterval = setInterval(checkStatus, 3000);
     }
 
     async function handleDonate() {
@@ -629,6 +686,7 @@
       }
       paymentStatus.classList.remove('visible');
       paymentStatus.classList.remove('pending', 'paid', 'expired');
+      expiredActions.classList.remove('visible');
     }
 
     amountBtns.forEach(btn => {
@@ -683,6 +741,10 @@
           console.error('Status check failed:', error);
         }
       }
+    });
+
+    newInvoiceBtn.addEventListener('click', () => {
+      handleDonate();
     });
   </script>
 </body>
