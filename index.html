@@ -105,10 +105,39 @@
       font-size: 14px;
     }
 
-    .amount-slider .amount-value {
+    .amount-input-wrapper {
+      display: flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 0 12px;
+      margin-bottom: 16px;
+    }
+
+    .amount-input-wrapper:focus-within {
+      border-color: #f7931a;
+    }
+
+    .amount-input-wrapper input {
+      background: transparent;
+      border: none;
       color: #f7931a;
       font-size: 24px;
       font-weight: 700;
+      width: 120px;
+      padding: 12px 0;
+      outline: none;
+      text-align: right;
+    }
+
+    .amount-input-wrapper input::placeholder {
+      color: rgba(247, 147, 26, 0.5);
+    }
+
+    .amount-input-wrapper .sats-label {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 16px;
     }
 
     .amount-slider input[type="range"] {
@@ -401,9 +430,9 @@
     <p>Help us continue building amazing things. Every sat counts!</p>
 
     <div class="amount-slider">
-      <div class="label">
-        <span>Select amount</span>
-        <span class="amount-value"><span id="sliderValue">100</span> sats</span>
+      <div class="amount-input-wrapper">
+        <input type="number" id="customAmount" placeholder="100" min="10" max="10000" value="100">
+        <span class="sats-label">sats</span>
       </div>
       <input type="range" id="amountSlider" min="10" max="10000" value="100" step="10">
       <div class="range-labels">
@@ -460,7 +489,7 @@
     const RECIPIENT_USERNAME = 'satsinaction';
 
     const amountSlider = document.getElementById('amountSlider');
-    const sliderValue = document.getElementById('sliderValue');
+    const customAmount = document.getElementById('customAmount');
     const donateBtn = document.getElementById('donateBtn');
     const errorMsg = document.getElementById('errorMsg');
     const invoiceDisplay = document.getElementById('invoiceDisplay');
@@ -698,13 +727,24 @@
       expiredActions.classList.remove('visible');
     }
 
-    amountSlider.addEventListener('input', (e) => {
-      selectedAmount = parseInt(e.target.value);
-      sliderValue.textContent = selectedAmount;
+    function updateAmount(value) {
+      let amount = parseInt(value) || 10;
+      amount = Math.max(10, Math.min(10000, amount));
+      selectedAmount = amount;
+      amountSlider.value = amount;
+      customAmount.value = amount;
       hideError();
       invoiceDisplay.classList.remove('visible');
       currentPaymentRequest = '';
       stopPolling();
+    }
+
+    amountSlider.addEventListener('input', (e) => {
+      updateAmount(e.target.value);
+    });
+
+    customAmount.addEventListener('input', (e) => {
+      updateAmount(e.target.value);
     });
 
     donateBtn.addEventListener('click', handleDonate);
